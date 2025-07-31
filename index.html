@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Message Board</title>
+  <style>
+    body {
+      background-color: #f0e0d6;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      max-width: 750px;
+      margin: 20px auto;
+      padding: 20px;
+    }
+    h2 {
+      font-size: 18px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #ccc;
+    }
+    .input-group {
+      margin-bottom: 10px;
+    }
+    label {
+      font-weight: bold;
+      font-size: 14px;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 5px;
+      font-family: "Courier New", Courier, monospace;
+      font-size: 14px;
+      border: 1px solid #aaa;
+      background-color: #fefcf8;
+      box-sizing: border-box;
+    }
+    textarea { height: 60px; }
+    button {
+      padding: 6px 12px;
+      font-size: 14px;
+      background-color: #d6daf0;
+      border: 1px solid #aab;
+      cursor: pointer;
+    }
+    #threads, #thread-view {
+      margin-top: 20px;
+    }
+    .thread {
+      border: 1px solid #d9bfb7;
+      background-color: #ffffee;
+      padding: 10px;
+      margin-bottom: 15px;
+      cursor: pointer;
+    }
+    .thread-title {
+      font-weight: bold;
+      font-size: 16px;
+      color: #117743;
+      margin-bottom: 5px;
+    }
+    .thread-preview {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #333;
+    }
+    .message {
+      border: 1px solid #d9bfb7;
+      background-color: #ffffee;
+      padding: 10px;
+      margin-bottom: 15px;
+    }
+    .username {
+      font-weight: bold;
+      color: #117743;
+      font-size: 14px;
+      display: inline-block;
+    }
+    .timestamp {
+      color: #999;
+      font-size: 12px;
+      margin-left: 10px;
+      display: inline-block;
+      font-family: Arial, Helvetica, sans-serif;
+      vertical-align: middle;
+    }
+    .post-text {
+      font-family: "Courier New", Courier, monospace;
+      font-size: 14px;
+      margin-top: 5px;
+      white-space: pre-wrap;
+    }
+    .greentext {
+      color: #789922;
+    }
+    #back-btn {
+      margin-bottom: 10px;
+      font-size: 14px;
+      background-color: #d6daf0;
+      border: 1px solid #aab;
+      cursor: pointer;
+      padding: 5px 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h2 id="page-title">Message Board</h2>
+
+  <div id="threads-view">
+    <div class="input-group">
+      <label for="threadTitle">Thread Title:</label>
+      <input type="text" id="threadTitle" placeholder="Thread title (required)" />
+    </div>
+    <div class="input-group">
+      <label for="username">Name:</label>
+      <input type="text" id="username" placeholder="Anonymous" />
+    </div>
+    <div class="input-group">
+      <label for="threadMessage">Message:</label>
+      <textarea id="threadMessage" placeholder="Write your message..."></textarea>
+    </div>
+    <button id="create-thread-btn">Create Thread</button>
+
+    <div id="threads"></div>
+  </div>
+
+  <div id="thread-view" style="display:none;">
+    <button id="back-btn">⬅ Back to Threads</button>
+    <h3 id="thread-view-title"></h3>
+    <div id="posts"></div>
+    <div class="input-group">
+      <label for="replyUsername">Name:</label>
+      <input type="text" id="replyUsername" placeholder="Anonymous" />
+    </div>
+    <div class="input-group">
+      <label for="replyMessage">Reply:</label>
+      <textarea id="replyMessage" placeholder="Write your reply..."></textarea>
+    </div>
+    <button id="post-reply-btn">Post Reply</button>
+  </div>
+
+  <script>
+    // REPLACE with your Railway backend URL after deployment
+    const API_BASE = 'https://your-railway-app-url.up.railway.app';
+
+    function formatTimestamp(isoString) {
+      if (!isoString) return "";
+      const date = new Date(isoString);
+      return date.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    function formatText(text) {
+      const escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      return escaped
+        .split("\n")
+        .map(line => line.startsWith("&gt;") ? `<span class="greentext">${line}</span>` : line)
+        .join("<br>");
+    }
+
+    async function renderThreads() {
+      const threadsDiv = document.getElementById("threads");
+      threadsDiv.innerHTML = "Loading threads...";
+      try {
+        const res = await fetch(`${API_BASE}/threads`);
+        if (!res.ok) throw new Error("Failed to load threads");
+        const threads = await res.json();
+        if (threads.length === 0) {
+          threadsDiv.textContent = "No threads yet. Create one!";
+          return;
+        }
+        threadsDiv.innerHTML = "";
+        threads.forEach(thread => {
+          const div = document.createElement("div");
+          div.className = "thread";
+          div.dataset.id = thread.id;
+
+          const title = document.createElement("div");
+          title.className = "thread-title";
+          title.textContent = thread.title;
+
+          const preview = document.createElement("div");
+          preview.className = "thread-preview";
+          if (thread.posts.length > 0) {
+            preview.textContent = thread.posts[0].text.split('\n')[0];
+          } else {
+            preview.textContent = "(no posts)";
+          }
+
+          div.appendChild(title);
+          div.appendChild(preview);
+
+          div.onclick = () => openThread(thread.id);
+
+          threadsDiv.appendChild(div);
+        });
+      } catch (err) {
+        threadsDiv.textContent = "Error loading threads.";
+        console.error(err);
+      }
+    }
+
+    async function openThread(threadId) {
+      document.getElementById("page-title").textContent = "Thread";
+      document.getElementById("threads-view").style.display = "none";
+      document.getElementById("thread-view").style.display = "block";
+      document.getElementById("back-btn").style.display = "inline-block";
+
+      try {
+        const res = await fetch(`${API_BASE}/threads/${threadId}`);
+        if (!res.ok) throw new Error("Thread not found");
+        const thread = await res.json();
+
+        document.getElementById("thread-view-title").textContent = thread.title;
+        renderPosts(thread.posts);
+        currentThreadId = threadId;
+      } catch (err) {
+        alert("Failed to load thread");
+        backToThreads();
+        console.error(err);
+      }
+    }
+
+    function renderPosts(posts) {
+      const postsDiv = document.getElementById("posts");
+      postsDiv.innerHTML = "";
+      posts.forEach(post => {
+        const postDiv = document.createElement("div");
+        postDiv.className = "message";
+
+        const header = document.createElement("div");
+        const userSpan = document.createElement("span");
+        userSpan.className = "username";
+        userSpan.textContent = post.user || "Anonymous";
+
+        const timeSpan = document.createElement("span");
+        timeSpan.className = "timestamp";
+        timeSpan.textContent = formatTimestamp(post.timestamp);
+
+        header.appendChild(userSpan);
+        header.appendChild(timeSpan);
+
+        const textDiv = document.createElement("div");
+        textDiv.className = "post-text";
+        textDiv.innerHTML = formatText(post.text);
+
+        postDiv.appendChild(header);
+        postDiv.appendChild(textDiv);
+        postsDiv.appendChild(postDiv);
+      });
+    }
+
+    async function createThread() {
+      const title = document.getElementById("threadTitle").value.trim();
+      const user = document.getElementById("username").value.trim() || "Anonymous";
+      const text = document.getElementById("threadMessage").value.trim();
+
+      if (!title || !text) {
+        alert("Please enter thread title and message.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/threads`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, user, text }),
+        });
+        if (!res.ok) throw new Error("Failed to create thread");
+        await res.json();
+
+        document.getElementById("threadTitle").value = "";
+        document.getElementById("username").value = "";
+        document.getElementById("threadMessage").value = "";
+
+        renderThreads();
+      } catch (err) {
+        alert("Error creating thread.");
+        console.error(err);
+      }
+    }
+
+    async function postReply() {
+      if (!currentThreadId) return;
+
+      const user = document.getElementById("replyUsername").value.trim() || "Anonymous";
+      const text = document.getElementById("replyMessage").value.trim();
+      if (!text) {
+        alert("Reply cannot be empty.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/threads/${currentThreadId}/replies`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user, text }),
+        });
+        if (!res.ok) throw new Error("Failed to post reply");
+        const thread = await res.json();
+
+        renderPosts(thread.posts);
+        document.getElementById("replyUsername").value = "";
+        document.getElementById("replyMessage").value = "";
+      } catch (err) {
+        alert("Error posting reply.");
+        console.error(err);
+      }
+    }
+
+    function backToThreads() {
+      document.getElementById("page-title").textContent = "Message Board";
+      document.getElementById("threads-view").style.display = "block";
+      document.getElementById("thread-view").style.display = "none";
+      document.getElementById("back-btn").style.display = "none";
+      currentThreadId = null;
+    }
+
+    let currentThreadId = null;
+
+    document.getElementById("create-thread-btn").onclick = createThread;
+    document.getElementById("post-reply-btn").onclick = postReply;
+    document.getElementById("back-btn").onclick = backToThreads;
+
+    renderThreads();
+  </script>
+</body>
+</html>
